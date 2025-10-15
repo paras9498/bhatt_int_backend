@@ -1,0 +1,23 @@
+# Core FastAPI stack
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Database ORM + MySQL driver
+SQLAlchemy==2.0.35
+pymysql==1.1.1
+
+# Pydantic (settings + email support)
+pydantic==2.9.2
+pydantic-settings==2.6.1
+email-validator==2.2.0   # needed for pydantic[email]
+
+# Password hashing
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2            # compatible with passlib + Python 3.13
+
+# JWT & authentication
+python-jose[cryptography]==3.3.0
+PyJWT==2.9.0
+
+# Utilities (optional but good to have)
+python-dotenv==1.0.1     # for loading .env files
