@@ -129,3 +129,16 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             "message": "Internal server error",
             "detail": e
         }
+
+
+@router.get("/greetings")
+def create_greeting():
+    try:
+        return {
+            "message": "hiiiiiiiiii"
+        }
+
+    except HTTPException as e :
+        return {
+            "message": e
+        }
