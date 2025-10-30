@@ -46,10 +46,24 @@ def signup(data: UserSignup, db: Session = Depends(get_db)):
 def login(data: UserLogin, db: Session = Depends(get_db)):
     try:
         user = db.query(User).filter(User.email == data.email).first()
+        #print(user.email)
 
         # Email and password validation
-        if not user or not CryptContext(schemes=["bcrypt"], deprecated="auto").verify(data.password, user.password):
-            raise HTTPException(status = status.HTTP_401_UNAUTHORIZED, detail = "Invalid email or password")
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+
+        # ✅ Create password context only once
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+        # ✅ Validate password
+        if not pwd_context.verify(data.password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
         
         existing_token = db.query(Tokens).filter(Tokens.u_id == user.id).first()
         if existing_token:
@@ -122,6 +136,10 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
                     "username": user.username
                 }
             }
+        
+    except HTTPException as e:
+        raise e
+    
     except Exception as e:
         db.rollback()
         return {

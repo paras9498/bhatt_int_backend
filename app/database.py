@@ -18,6 +18,7 @@ MYSQL_PASSWORD = "fa131fc31843c2542d2fc4c8bd49ebbd0eac77bc"
 MYSQL_DB = "igt_database_rapidlyten"
 
 # Connection URL using mysqlconnector
+#DATABASE_URL = "mysql+pymysql://root:@localhost:3306/bhatt_int_test"
 DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_DB}"
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
