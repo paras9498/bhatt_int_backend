@@ -6,7 +6,9 @@ from ..schemas.customer_schema import CreateCustomer
 
 router = APIRouter(prefix = "/api/customer", tags = ['Customer'])
 
-
+'''
+Create customer entry in 'customer_master' table
+'''
 @router.post("/create")
 def create_customer(data: CreateCustomer, db:Session = Depends(get_db)):
     try:
@@ -36,6 +38,9 @@ def create_customer(data: CreateCustomer, db:Session = Depends(get_db)):
         }
     
 
+'''
+Get all the details from "customer_master" table
+'''
 @router.get("/get_all")
 def get_all_details(db:Session = Depends(get_db)):
     try:

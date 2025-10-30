@@ -7,8 +7,107 @@ from ..models.section_model import SectionMaster
 from ..models.material_model import MaterialMaster
 from ..models.inbond_model import InbondMaster, InbondChild
 from ..models.customer_model import CustomerMaster
+from sqlalchemy import func
 
 router = APIRouter(prefix = "/api/exbond", tags = ["Exbond"])
+
+
+def get_total_weight_by_material(inbond_master_id_list, db: Session):
+    # Fetch total inbond weights grouped by inbond_master_id and material_master_id
+    inbond_weights = (
+        db.query(
+            InbondChild.inbond_master_id,
+            InbondChild.material_master_id,
+            func.sum(InbondChild.weight).label("total_inbond_weight")
+        )
+        .filter(InbondChild.inbond_master_id.in_(inbond_master_id_list))
+        .group_by(InbondChild.inbond_master_id, InbondChild.material_master_id)
+        .all()
+    )
+
+    # Fetch total exbond weights grouped by inbond_master_id and material_master_id
+    exbond_weights = (
+        db.query(
+            ExbondChild.inbond_master_id,
+            ExbondChild.material_master_id,
+            func.sum(ExbondChild.weight).label("total_exbond_weight")
+        )
+        .filter(ExbondChild.inbond_master_id.in_(inbond_master_id_list))
+        .group_by(ExbondChild.inbond_master_id, ExbondChild.material_master_id)
+        .all()
+    )
+
+    # Combine data
+    master_data = {}
+
+    # Add inbond data
+    for item in inbond_weights:
+        master_id = item.inbond_master_id
+        material_id = item.material_master_id
+
+        if master_id not in master_data:
+            master_data[master_id] = {}
+
+        if material_id not in master_data[master_id]:
+            master_data[master_id][material_id] = {
+                "total_inbond_weight": 0,
+                "total_exbond_weight": 0
+            }
+
+        master_data[master_id][material_id]["total_inbond_weight"] = item.total_inbond_weight
+
+    # Add exbond data
+    for item in exbond_weights:
+        master_id = item.inbond_master_id
+        material_id = item.material_master_id
+
+        if master_id not in master_data:
+            master_data[master_id] = {}
+
+        if material_id not in master_data[master_id]:
+            master_data[master_id][material_id] = {
+                "total_inbond_weight": 0,
+                "total_exbond_weight": 0
+            }
+
+        master_data[master_id][material_id]["total_exbond_weight"] = item.total_exbond_weight
+
+    # Prepare result list and update settlement status
+    result = []
+    for master_id, materials in master_data.items():
+        all_settled = True
+        material_list = []
+
+        for material_id, weights in materials.items():
+            inbond_wt = weights["total_inbond_weight"] or 0
+            exbond_wt = weights["total_exbond_weight"] or 0
+
+            # If any material not fully exbonded → not settled
+            if exbond_wt < inbond_wt:
+                all_settled = False
+
+            material_list.append({
+                "material_master_id": material_id,
+                "total_inbond_weight": inbond_wt,
+                "total_exbond_weight": exbond_wt
+            })
+
+        # ✅ Update only if all materials are settled
+        if all_settled:
+            inbond_master = db.query(InbondMaster).filter(InbondMaster.id == master_id).first()
+            if inbond_master and not inbond_master.is_settled:
+                inbond_master.is_settled = True
+
+        # Prepare result
+        result.append({
+            "inbond_master_id": master_id,
+            "is_settled": all_settled,
+            "materials": material_list
+        })
+
+    db.commit()
+    return result
+
 
 '''
 Create entry in the "exbond_master" and "exbond_child" table
@@ -16,6 +115,7 @@ Create entry in the "exbond_master" and "exbond_child" table
 @router.post("/create")
 def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
     try:
+        #inbond_master_id_array = []
         latest = db.query(ExbondMaster).order_by(ExbondMaster.exbond_id.desc()).first()
         next_exbond_id = 1001 if not latest or not latest.exbond_id else latest.exbond_id + 1
 
@@ -24,12 +124,13 @@ def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
             total_duty_exbond_amount_inr = data.total_duty_exbond_amount_inr,
             total_weight = data.total_weight,
             total_invoice_amount_inr = data.total_invoice_amount_inr,
-            total_dispatch_weight = data.total_dispatch_weight
+            #total_dispatch_weight = data.total_dispatch_weight
         )
         db.add(exbond_master)
         db.commit()
         db.refresh(exbond_master)
 
+        inbond_master_id_list = []
         for exbondchild in data.exbondchild:
             exbond_child = ExbondChild(
                 exbond_master_id = exbond_master.id,
@@ -46,12 +147,17 @@ def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
                 rate = exbondchild.rate,
                 weight = exbondchild.weight,
                 invoice_amount_inr = exbondchild.invoice_amount_inr,
-                dispatch_date = exbondchild.dispatch_date,
-                dispatch_weight = exbondchild.dipspatch_weight,
-                truck_number = exbondchild.truck_number
+                #dispatch_date = exbondchild.dispatch_date,
+                #dispatch_weight = exbondchild.dipspatch_weight,
+                #truck_number = exbondchild.truck_number
             )
             db.add(exbond_child)
+            inbond_master_id_list.append(exbond_child.inbond_master_id)
         db.commit()
+
+        result = get_total_weight_by_material(inbond_master_id_list,db)
+        print(result)
+
         return{
             "status": status.HTTP_201_CREATED,
             "message": "Exbond entry created successfully",
@@ -104,9 +210,9 @@ def get_all_details(db:Session = Depends(get_db)):
                     "weight": exbond_child.weight,
                     "invoice_amount_inr": exbond_child.invoice_amount_inr,
                     "customer_name": customer.name,
-                    "dispatch_date": exbond_child.dispatch_date,
-                    "dispatch_weight": exbond_child.dispatch_weight,
-                    "truck_number": exbond_child.truck_number
+                    #"dispatch_date": exbond_child.dispatch_date,
+                    #"dispatch_weight": exbond_child.dispatch_weight,
+                    #"truck_number": exbond_child.truck_number
                 }
                 child_list.append(child_obj)
             
@@ -117,7 +223,7 @@ def get_all_details(db:Session = Depends(get_db)):
                 "total_duty_exbond_amount_inr": exbond_master.total_duty_exbond_amount_inr,
                 "total_weight": exbond_master.total_weight,
                 "total_invoice_amount_inr": exbond_master.total_invoice_amount_inr,
-                "total_dispatch_weight": exbond_master.total_dispatch_weight,
+                #"total_dispatch_weight": exbond_master.total_dispatch_weight,
                 "created_at": exbond_master.created_at
             }
             master_list.append(master_obj)

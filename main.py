@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from app.routers import auth, inbond, material, section, exbond, duty_space, customer
+from app.routers import auth, inbond, material, section, exbond, duty_space, customer, dispatch
 from app.database import engine, Base
 
 Base.metadata.create_all(bind=engine)
@@ -29,6 +29,7 @@ app.include_router(section.router)
 app.include_router(exbond.router)
 app.include_router(duty_space.router)
 app.include_router(customer.router)
+app.include_router(dispatch.router)
 
 if __name__ == "__main__":
     uvicorn.run(app="main:app", host="0.0.0.0", port=8000, reload=True)

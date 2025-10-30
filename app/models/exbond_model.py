@@ -1,5 +1,5 @@
 from app.database import Base
-from sqlalchemy import Column, Integer, String, Date, Float, DateTime, Numeric
+from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean
 from datetime import datetime
 from decimal import Decimal
 
@@ -11,7 +11,8 @@ class ExbondMaster(Base):
     total_duty_exbond_amount_inr = Column(Numeric(18,2), default=Decimal('0.00'))
     total_weight = Column(Numeric(18,2), default=Decimal('0.00'))
     total_invoice_amount_inr = Column(Numeric(18,2), default=Decimal('0.00'))
-    total_dispatch_weight = Column(Numeric(18,2), default=Decimal('0.00'))
+    is_delete = Column(Boolean, default=False)
+    #total_dispatch_weight = Column(Numeric(18,2), default=Decimal('0.00'))
     created_at = Column(DateTime, default = datetime.utcnow)
     updated_at = Column(DateTime, default = datetime.utcnow)
     created_by = Column(Integer, nullable=True)
@@ -36,9 +37,11 @@ class ExbondChild(Base):
     rate = Column(Numeric(18,2), default=Decimal('0.00'))
     weight = Column(Numeric(18,2), default=Decimal('0.00'))
     invoice_amount_inr = Column(Numeric(18,2), default=Decimal('0.00'))
-    dispatch_date = Column(Date)
-    dispatch_weight = Column(Numeric(18,2), default=Decimal('0.00'))
-    truck_number = Column(String(50))
+    is_dispatched = Column(Boolean, default=False)
+    is_delete = Column(Boolean, default=False)
+    #dispatch_date = Column(Date)
+    #dispatch_weight = Column(Numeric(18,2), default=Decimal('0.00'))
+    #truck_number = Column(String(50))
     created_at = Column(DateTime, default = datetime.utcnow)
     updated_at = Column(DateTime, default = datetime.utcnow)
     created_by = Column(Integer, nullable=True)
@@ -53,6 +56,7 @@ class ExbondAdjustment(Base):
     adjustment_amount_inr = Column(Numeric(18,2), default=Decimal('0.00'))
     date_of_adjustment = Column(Date)
     type = Column(String(50))
+    is_delete = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, nullable=True)

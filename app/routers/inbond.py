@@ -133,7 +133,7 @@ Get all the bi_numbers from the "inbond_master" table
 '''
 @router.get("/get_binumber")
 def get_all_binumber(db:Session = Depends(get_db)):
-    inbonds = db.query(InbondMaster).order_by(InbondMaster.created_at.desc()).all()
+    inbonds = db.query(InbondMaster).filter(InbondMaster.is_settled == 0).order_by(InbondMaster.created_at.desc()).all()
     binumber_list = []
 
     for inbond in inbonds:
