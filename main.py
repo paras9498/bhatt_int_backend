@@ -9,6 +9,7 @@ from passlib.context import CryptContext
 
 Base.metadata.create_all(bind=engine)
 
+
 app = FastAPI(
     title = "Bhatt Iternational API",
     description = "API for Bhatt International",
