@@ -27,6 +27,7 @@ class ExbondChild(Base):
     section_master_id = Column(Integer)
     material_master_id = Column(Integer)
     inbond_master_id = Column(Integer)
+    inbond_child_id = Column(Integer)
     customer_master_id = Column(Integer)
     be_number = Column(String(50))
     be_date = Column(Date)

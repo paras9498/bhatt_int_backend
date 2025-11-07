@@ -5,7 +5,6 @@ from app.routers import auth, inbond, material, section, exbond, duty_space, cus
 from app.database import engine, Base,SessionLocal
 from app.models.auth_model import User
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime
 from passlib.context import CryptContext
 
 Base.metadata.create_all(bind=engine)
@@ -20,7 +19,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://192.168.2.12:8000", "http://192.168.2.11:3000", "http://localhost:3000", "https://bhattinternational.vercel.app"],
+    allow_origins=["http://192.168.2.12:8000", "http://192.168.2.2:3000", "http://localhost:3000", "https://bhattinternational.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

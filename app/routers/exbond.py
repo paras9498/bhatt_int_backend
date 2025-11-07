@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.database import get_db
 from sqlalchemy.orm import Session
 from ..models.exbond_model import ExbondChild, ExbondMaster
-from ..schemas.exbond_schema import CreateExbondMaster
+from ..schemas.exbond_schema import CreateExbondMaster, UpdateExbondChild
 from ..models.section_model import SectionMaster
 from ..models.material_model import MaterialMaster
 from ..models.inbond_model import InbondMaster, InbondChild
 from ..models.customer_model import CustomerMaster
+from ..models.dispatch_model import DispatchChild
 from sqlalchemy import func
 
 router = APIRouter(prefix = "/api/exbond", tags = ["Exbond"])
@@ -138,6 +139,7 @@ def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
                 section_master_id = exbondchild.section_master_id,
                 material_master_id = exbondchild.material_master_id,
                 customer_master_id = exbondchild.customer_master_id,
+                inbond_child_id = exbondchild.inbond_child_id,
                 be_number = exbondchild.be_number,
                 be_date = exbondchild.be_date,
                 type = exbondchild.type,
@@ -179,14 +181,14 @@ To get all the details from the "exbond_master" and "exbond_child"
 @router.get("/get_all")
 def get_all_details(db:Session = Depends(get_db)):
     try:
-        exbonds_master = db.query(ExbondMaster).order_by(ExbondMaster.created_at.desc()).all()
+        exbonds_master = db.query(ExbondMaster).filter(ExbondMaster.is_delete == 0).order_by(ExbondMaster.created_at.desc()).all()
 
         master_list = []
         
         for exbond_master in exbonds_master:
             master_id = exbond_master.id
             child_list = []
-            exbonds_child = db.query(ExbondChild).filter(ExbondChild.exbond_master_id == master_id).all()
+            exbonds_child = db.query(ExbondChild).filter(ExbondChild.exbond_master_id == master_id, ExbondChild.is_delete== 0).all()
             for exbond_child in exbonds_child:
                 section = db.query(SectionMaster).filter(SectionMaster.id == exbond_child.section_master_id).first()
                 material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id).first()
@@ -204,6 +206,7 @@ def get_all_details(db:Session = Depends(get_db)):
                     "resultant": exbond_child.resultant,
                     "material_master_id": exbond_child.material_master_id,
                     "material_name": material.name,
+                    "material_short_code": material.short_code,
                     "duty_exbond_amount_inr": exbond_child.duty_exbond_amount_inr,
                     "dollar_inr": exbond_child.dollar_inr,
                     "rate": exbond_child.rate,
@@ -249,16 +252,18 @@ def get_material_inbond_bedate_by_id(
     db:Session = Depends(get_db)
 ):
     try:
-        inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == inbond_master_id).all()
-        inbond_master = db.query(InbondMaster).filter(InbondMaster.id == inbond_master_id).first()
+        inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == inbond_master_id, InbondChild.is_delete == 0).all()
+        inbond_master = db.query(InbondMaster).filter(InbondMaster.id == inbond_master_id, InbondMaster.is_delete == 0).first()
 
         list = []
         for inbond_child in inbonds_child:
             material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id).first()
             obj = {
-                "id": inbond_child.id,
+                "inbond_master_id": inbond_master.id,
+                "inbond_child_id": inbond_child.id,
                 "material_master_id": inbond_child.material_master_id,
                 "material_name": material.name,
+                "material_weight": inbond_child.weight,
                 "inbond_be_date": inbond_master.be_date
             }
 
@@ -323,6 +328,170 @@ def get_weight_and_duty(
     except HTTPException as e:
         db.rollback()
         return{
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }
+    
+
+
+@router.get("/get_weight_duty_test")
+def get_weight_and_duty(
+    inbond_child_id: int = Query(..., description = "Inbond Child ID"),
+    db: Session = Depends(get_db)
+):
+    try:
+        inbond_child = db.query(InbondChild).filter(InbondChild.id == inbond_child_id).first()
+
+        inbond_obj = {
+            "inbond_weight": inbond_child.weight,
+            "duty_inbond_amount_inr": inbond_child.duty_inbond_amount_inr
+        }
+
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.inbond_child_id == inbond_child_id).all()
+
+        exbond_weight_total = 0
+        duty_exbond_amount_inr_total = 0
+        for exbond_child in exbonds_child:
+            exbond_weight_total += exbond_child.weight
+            duty_exbond_amount_inr_total += exbond_child.duty_exbond_amount_inr
+
+        exbond_obj = {
+            "exbond_weight": exbond_weight_total,
+            "duty_exbond_amount_inr": duty_exbond_amount_inr_total
+        }
+
+        data = {
+            #"material_master_id": material_master_id,
+            #"inbond_master_id": inbond_master_id,
+            "material_master_id": inbond_child.material_master_id,
+            "inbond_child_id": inbond_child_id,
+            "inbond": inbond_obj,
+            "exbond": exbond_obj
+        }
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Total weight and duty details from inbond and exbond found",
+            "data": data
+        }
+
+    except HTTPException as e:
+        db.rollback()
+        return{
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }
+    
+
+@router.put("/soft_delete_partial/{exbond_child_id}")
+def soft_delete_partial_entry(exbond_child_id: int, db:Session = Depends(get_db)):
+    try:
+        exbond_child = db.query(ExbondChild).filter(ExbondChild.id == exbond_child_id).first()
+        dispatch_child = db.query(DispatchChild).filter(DispatchChild.exbond_child_id == exbond_child_id, DispatchChild.is_delete == 0).first()
+        exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_child.exbond_master_id).first()
+
+        if not exbond_child:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "Exbond child entry not found"
+            )
+        
+        if exbond_child.is_delete == 1:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "Exbond child already deleted"
+            }
+        
+        if dispatch_child:
+            return {
+                "status": status.HTTP_400_BAD_REQUEST,
+                "message": f"Dispatch entry for the {exbond_child_id} exists"
+            }
+        
+        duty_exbond_amount = exbond_child.duty_exbond_amount_inr
+        exbond_weight = exbond_child.weight
+        invoice_amount = exbond_child.invoice_amount_inr
+
+        total_duty_exbond_amount = exbond_master.total_duty_exbond_amount_inr
+        total_exbond_weight = exbond_master.total_weight
+        total_invoice_amount = exbond_master.total_invoice_amount_inr
+
+        total_duty_exbond_amount -= duty_exbond_amount
+        total_exbond_weight -= exbond_weight
+        total_invoice_amount -= invoice_amount
+
+        if total_duty_exbond_amount == 0.00 and total_exbond_weight == 0.00 and total_invoice_amount == 0.00:
+            exbond_master.is_delete = 1
+        
+        exbond_master.total_duty_exbond_amount_inr = total_duty_exbond_amount
+        exbond_master.total_weight = total_exbond_weight
+        exbond_master.total_invoice_amount_inr = total_invoice_amount
+
+        exbond_child.is_delete = 1
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Exbond deleted successfully and exbond master adjusted successfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }
+    
+
+@router.put("/soft_delete_complete/{exbond_master_id}")
+def soft_delete_complete_entry(exbond_master_id: int, db:Session = Depends(get_db)):
+    try:
+        exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_master_id).first()
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.exbond_master_id == exbond_master.id).all()
+
+        if not exbond_master:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "Exbond master entry not found"
+            )
+        
+        if exbond_master.is_delete == 1:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "Exbond master already deleted"
+            }
+        
+        for exbond_child in exbonds_child:
+            dispatch_child = db.query(DispatchChild).filter(DispatchChild.exbond_child_id == exbond_child.id, DispatchChild.is_delete == 0).first()
+
+            if dispatch_child:
+                return {
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": f"Dispatch entry for the {exbond_master_id} exists"
+                }
+        
+            exbond_child.is_delete = 1
+
+        exbond_master.is_delete = 1
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Exbond deleted successfully and exbond child adjusted successfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
             "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
             "message": "Internal server error",
             "detail": e

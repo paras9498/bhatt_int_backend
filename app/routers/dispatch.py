@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..models.exbond_model import ExbondChild, ExbondMaster
 from ..models.customer_model import CustomerMaster
 from ..models.material_model import MaterialMaster
-from ..schemas.dispatch_schema import CreateDispatchMaster
+from ..schemas.dispatch_schema import CreateDispatchMaster, UpdateDispatchChild
 from ..models.dispatch_model import DispatchMaster, DispatchChild
 
 router = APIRouter(prefix = "/api/dispatch", tags = ["Dispatch"])
@@ -42,7 +42,7 @@ def get_all_be_number(db:Session = Depends(get_db)):
 
 @router.get("/get_exbond")
 def get_exbonds(
-    exbond_master_id: int = Query(..., description="Inbond Master ID"),
+    exbond_master_id: int = Query(..., description="Exbond Master ID"),
     db: Session = Depends(get_db)
 ):
     try:
@@ -52,7 +52,7 @@ def get_exbonds(
         if not exbonds_child:
             return {
                 "status": status.HTTP_204_NO_CONTENT,
-                "message": "No exbond details found for this inbond_master_id",
+                "message": "No exbond details found for this exbond_master_id",
                 "data": []
             }
 
@@ -159,15 +159,15 @@ def create_dispatch(data: CreateDispatchMaster, db:Session = Depends(get_db)):
 @router.get("/get_all")
 def get_all_details(db:Session = Depends(get_db)):
     try:
-        dispatchs_master = db.query(DispatchMaster).order_by(DispatchMaster.created_at.desc()).all()
+        dispatchs_master = db.query(DispatchMaster).filter(DispatchMaster.is_delete == 0).order_by(DispatchMaster.created_at.desc()).all()
         master_list = []
 
         for dispatch_master in dispatchs_master:
 
             child_list = []
-            dispatchs_child = db.query(DispatchChild).filter(DispatchChild.dispatch_master_id == dispatch_master.id).all()
+            dispatchs_child = db.query(DispatchChild).filter(DispatchChild.dispatch_master_id == dispatch_master.id, DispatchChild.is_delete == 0).all()
+            
             for dispatch_child in dispatchs_child:
-
                 exbond_child = db.query(ExbondChild).filter(ExbondChild.id == dispatch_child.exbond_child_id).first()
                 exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_child.exbond_master_id).first()
                 material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id).first()
@@ -210,3 +210,90 @@ def get_all_details(db:Session = Depends(get_db)):
             "detail": e
         }
     
+
+@router.put("/soft_delete_partial/{dispatch_child_id}")
+def soft_delete_partial_entry(dispatch_child_id: int, db:Session = Depends(get_db)):
+    try:
+        dispatch_child = db.query(DispatchChild).filter(DispatchChild.id == dispatch_child_id).first()
+        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_child.dispatch_master_id).first()
+
+        if not dispatch_child:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "Dispatch child entry not found"
+            )
+        
+        if dispatch_child.is_delete == 1:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "Dispatch child already deleted"
+            }
+        
+        dispatch_weight = dispatch_child.dispatch_weight
+        total_dispatch_weight = dispatch_master.total_dispatch_weight
+
+        total_dispatch_weight -= dispatch_weight
+
+        dispatch_master.total_dispatch_weight = total_dispatch_weight
+        if dispatch_master.total_dispatch_weight == 0.00:
+            dispatch_master.is_delete = 1
+
+        dispatch_child.is_delete = 1
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Dispatch child deleted successfully and dispatch master adjusted successfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }
+    
+
+@router.put("/soft_delete_complete/{dispatch_master_id}")
+def soft_delete_complete_entry(dispatch_master_id: int, db:Session = Depends(get_db)):
+    try:
+        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_master_id).first()
+        dispatchs_child = db.query(DispatchChild).filter(DispatchChild.dispatch_master_id == dispatch_master.id).all()
+
+        if not dispatch_master:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "Dispatch master entry not found"
+            )
+        
+        if dispatch_master.is_delete == 1:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "Dispatch master already deleted"
+            }
+        
+        for dispatch_child in dispatchs_child:
+            dispatch_child.is_delete = 1
+
+        dispatch_master.is_delete = 1
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Dispatch deleted successfully and dispatch child adjusted successfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }

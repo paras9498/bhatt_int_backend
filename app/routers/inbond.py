@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import get_db
 from sqlalchemy.orm import Session
-from ..schemas.inbond_schema import CreateInbond
+from ..schemas.inbond_schema import CreateInbond, UpdateInbond, UpdateInbondChild
 from ..auth_utils import get_current_user
 from ..models.inbond_model import InbondMaster, InbondChild
 from ..models.material_model import MaterialMaster
+from ..models.exbond_model import ExbondChild
 
 router = APIRouter(prefix = "/api/inbond", tags = ["Inbond"])
 
@@ -75,20 +76,21 @@ To get all the details from the "inbond_master" and "inbond_child"
 @router.get("/get_all")
 def get_all_details(db:Session = Depends(get_db)):
     try:
-        inbonds_master = db.query(InbondMaster).order_by(InbondMaster.created_at.desc()).all()
+        inbonds_master = db.query(InbondMaster).filter(InbondMaster.is_delete == 0).order_by(InbondMaster.created_at.desc()).all()
 
         master_list = []
         
         for inbond_master in inbonds_master:
             master_id = inbond_master.id
             child_list = []
-            inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == master_id).all()
+            inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == master_id, InbondChild.is_delete == 0).all()
             for inbond_child in inbonds_child:
                 material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id).first()
                 child_obj = {
                     "id": inbond_child.id,
                     "material_master_id": inbond_child.material_master_id,
                     "material_name": material.name,
+                    "material_short_code": material.short_code,
                     "duty_inbond_amount_inr": inbond_child.duty_inbond_amount_inr,
                     "weight": inbond_child.weight,
                     "invoice_amount_usd": inbond_child.invoice_amount_usd,
@@ -133,7 +135,7 @@ Get all the bi_numbers from the "inbond_master" table
 '''
 @router.get("/get_binumber")
 def get_all_binumber(db:Session = Depends(get_db)):
-    inbonds = db.query(InbondMaster).filter(InbondMaster.is_settled == 0).order_by(InbondMaster.created_at.desc()).all()
+    inbonds = db.query(InbondMaster).filter(InbondMaster.is_settled == 0, InbondMaster.is_delete == 0).order_by(InbondMaster.created_at.desc()).all()
     binumber_list = []
 
     for inbond in inbonds:
@@ -148,3 +150,121 @@ def get_all_binumber(db:Session = Depends(get_db)):
         "message": "All binumbers found",
         "data": binumber_list
     }
+
+
+@router.put("/soft_delete_partial/{inbond_child_id}")
+def soft_delete_partial_entry(inbond_child_id: int, db:Session = Depends(get_db)):
+    try:
+        inbond_child = db.query(InbondChild).filter(InbondChild.id == inbond_child_id).first()
+        exbond_child = db.query(ExbondChild).filter(ExbondChild.inbond_child_id == inbond_child_id, ExbondChild.is_delete == 0).first()
+        inbond_master = db.query(InbondMaster).filter(InbondMaster.id == inbond_child.inbond_master_id).first()
+
+        if not inbond_child:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "Inbond child entry not found"
+            )
+        
+        if inbond_child.is_delete == 1:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "Inbond child already deleted"
+            }
+        
+        if exbond_child:
+            return {
+                "status": status.HTTP_400_BAD_REQUEST,
+                "message": f"Exbond entry for the {inbond_child_id} exists"
+            }
+        
+        duty_inbond_amount = inbond_child.duty_inbond_amount_inr
+        inbond_weight = inbond_child.weight
+        assessment_amount = inbond_child.assessment_amount_inr
+        material_amount = inbond_child.material_amount_usd
+
+        total_duty_inbond_amount = inbond_master.total_duty_inbond_amount_inr
+        total_inbond_weight = inbond_master.total_weight
+        total_assessment_amount = inbond_master.total_assessment_amount_inr
+        total_material_amount = inbond_master.total_material_amount_usd
+
+        total_duty_inbond_amount -= duty_inbond_amount
+        total_inbond_weight -= inbond_weight
+        total_assessment_amount -= assessment_amount
+        total_material_amount -= material_amount
+
+
+        if total_duty_inbond_amount == 0.00 and total_inbond_weight == 0.00 and total_assessment_amount == 0.00 and total_material_amount == 0.00:
+            inbond_master.is_delete = 1
+
+        inbond_master.total_duty_inbond_amount_inr = total_duty_inbond_amount
+        inbond_master.total_weight = total_inbond_weight
+        inbond_master.total_assessment_amount_inr = total_assessment_amount
+        inbond_master.total_material_amount_usd = total_material_amount
+
+        inbond_child.is_delete = 1
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Inbond deleted successfully and inbond master adjusted successfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }
+    
+
+@router.put("/soft_delete_complete/{inbond_master_id}")
+def soft_delete_complete_entry(inbond_master_id: int, db:Session = Depends(get_db)):
+    try:
+        inbond_master = db.query(InbondMaster).filter(InbondMaster.id == inbond_master_id).first()
+        inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == inbond_master_id).all()
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.inbond_master_id == inbond_master_id, ExbondChild.is_delete == 0).all()
+
+        if not inbond_master:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "Inbond master entry not found"
+            )
+        
+        if inbond_master.is_delete == 1:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "Inbond master already deleted"
+            }
+        
+        for exbond_child in exbonds_child:
+            if exbond_child:
+                return {
+                    "status": status.HTTP_400_BAD_REQUEST,
+                    "message": f"Exbond entry for the {inbond_master_id} exists"
+                }
+        
+        for inbond_child in inbonds_child:
+            inbond_child.is_delete = 1
+        inbond_master.is_delete = 1
+
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Inbond deleted successfully and inbond child adjusted successfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
+        }

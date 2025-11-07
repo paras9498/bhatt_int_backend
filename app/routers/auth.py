@@ -45,7 +45,7 @@ def signup(data: UserSignup, db: Session = Depends(get_db)):
 @router.post("/login")
 def login(data: UserLogin, db: Session = Depends(get_db)):
     try:
-        user = db.query(User).filter(User.email == data.email).first()
+        user = db.query(User).filter(User.email == data.email, User.is_active == True).first()
         #print(user.email)
 
         # Email and password validation
@@ -159,4 +159,41 @@ def create_greeting():
     except HTTPException as e :
         return {
             "message": e
+        }
+    
+
+@router.put("/soft_delete/{user_id}")
+def soft_delete_entry(user_id: int, db:Session = Depends(get_db)):
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+
+        if not user:
+            raise HTTPException(
+                status_code = status.HTTP_404_NOT_FOUND,
+                detail = "User entry not found"
+            )
+        
+        if user.is_active == False:
+            return {
+                "status": status.HTTP_204_NO_CONTENT,
+                "message": "User already deleted"
+            }
+        
+        user.is_active = False
+        db.commit()
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "User deleted succesfully"
+        }
+    
+    except HTTPException as e:
+        raise e
+    
+    except Exception as e:
+        db.rollback()
+        return {
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "message": "Internal server error",
+            "detail": e
         }
