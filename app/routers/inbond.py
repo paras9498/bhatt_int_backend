@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import get_db
 from sqlalchemy.orm import Session
-from ..schemas.inbond_schema import CreateInbond, UpdateInbond, UpdateInbondChild
+from ..schemas.inbond_schema import CreateInbond
 from ..auth_utils import get_current_user
 from ..models.inbond_model import InbondMaster, InbondChild
 from ..models.material_model import MaterialMaster

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..models.exbond_model import ExbondChild, ExbondMaster
 from ..models.customer_model import CustomerMaster
 from ..models.material_model import MaterialMaster
-from ..schemas.dispatch_schema import CreateDispatchMaster, UpdateDispatchChild
+from ..schemas.dispatch_schema import CreateDispatchMaster
 from ..models.dispatch_model import DispatchMaster, DispatchChild
 
 router = APIRouter(prefix = "/api/dispatch", tags = ["Dispatch"])

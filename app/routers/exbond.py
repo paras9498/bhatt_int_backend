@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.database import get_db
 from sqlalchemy.orm import Session
 from ..models.exbond_model import ExbondChild, ExbondMaster
-from ..schemas.exbond_schema import CreateExbondMaster, UpdateExbondChild
+from ..schemas.exbond_schema import CreateExbondMaster
 from ..models.section_model import SectionMaster
 from ..models.material_model import MaterialMaster
 from ..models.inbond_model import InbondMaster, InbondChild
