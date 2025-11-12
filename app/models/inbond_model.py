@@ -1,5 +1,5 @@
 from app.database import Base
-from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean
+from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, func
 from datetime import datetime
 from decimal import Decimal
 
@@ -18,7 +18,7 @@ class InbondMaster(Base):
     is_settled = Column(Boolean, default=False)
     is_delete = Column(Boolean, default=False)
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)
 
@@ -38,6 +38,6 @@ class InbondChild(Base):
     material_amount_usd = Column(Numeric(18, 2), default=Decimal('0.00'))
     is_delete = Column(Boolean, default=False)
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)

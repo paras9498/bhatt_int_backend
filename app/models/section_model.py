@@ -1,5 +1,5 @@
 from app.database import Base
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, func
 from datetime import datetime
 
 class SectionMaster(Base):
@@ -10,6 +10,6 @@ class SectionMaster(Base):
     section_desc = Column(String(225))
     is_delete = Column(Boolean, default=False)
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)

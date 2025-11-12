@@ -1,5 +1,5 @@
 from app.database import Base
-from sqlalchemy import Column, Integer, String, DateTime, Numeric, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Numeric, Boolean, func
 from datetime import datetime
 from decimal import Decimal
 
@@ -15,6 +15,6 @@ class MaterialMaster(Base):
     igst_pr = Column(Numeric(18, 2), default=Decimal('0.00'))
     is_delete = Column(Boolean, default=False)
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)

@@ -1,5 +1,5 @@
 from app.database import Base
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, func
 from datetime import datetime
 
 class User(Base):
@@ -13,7 +13,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     # role = Column(String(200), nullable=True)
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)
 
@@ -25,6 +25,6 @@ class Tokens(Base):
     access_token = Column(Text)
     refresh_token = Column(Text)
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)   

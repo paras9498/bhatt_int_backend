@@ -4,10 +4,31 @@ from sqlalchemy.orm import Session
 from ..models.exbond_model import ExbondChild, ExbondMaster
 from ..models.customer_model import CustomerMaster
 from ..models.material_model import MaterialMaster
-from ..schemas.dispatch_schema import CreateDispatchMaster
+from ..schemas.dispatch_schema import CreateDispatchMaster, UpdateDispatchChild, UpdateDispatchMaster
 from ..models.dispatch_model import DispatchMaster, DispatchChild
 
 router = APIRouter(prefix = "/api/dispatch", tags = ["Dispatch"])
+
+
+def get_weight_total_dispatch(exbond_child_id_list, db: Session):
+    for exbond_child_id in exbond_child_id_list:
+        exbond_child = db.query(ExbondChild).filter(ExbondChild.id == exbond_child_id, ExbondChild.is_delete == 0).first()
+        total_weight_exbond = exbond_child.weight
+
+        dispatchs_child = db.query(DispatchChild).filter(DispatchChild.exbond_child_id == exbond_child_id, DispatchChild.is_delete == 0).all()
+        
+        total_weight_dispatch = 0
+        for dispatch_child in dispatchs_child:
+            total_weight_dispatch += dispatch_child.dispatch_weight
+
+        if total_weight_exbond <= total_weight_dispatch:
+            exbond_child.is_dispatched = 1
+        
+        else:
+            exbond_child.is_dispatched = 0
+        
+    db.commit()
+
 
 '''
 Get the list of be numbers from the 'exbond_child' table
@@ -15,13 +36,13 @@ Get the list of be numbers from the 'exbond_child' table
 @router.get("/benumber")
 def get_all_be_number(db:Session = Depends(get_db)):
     try:
-        exbonds_master = db.query(ExbondChild).filter(ExbondChild.is_dispatched == 0).all()
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.is_dispatched == 0).all()
 
         be_number_list = []
-        for exbond_master in exbonds_master:
+        for exbond_child in exbonds_child:
             obj = {
-                "id": exbond_master.id,
-                "be_number": exbond_master.be_number
+                "id": exbond_child.id,
+                "be_number": exbond_child.be_number
             }
             be_number_list.append(obj)
 
@@ -47,7 +68,7 @@ def get_exbonds(
 ):
     try:
         # Get all ExbondChild linked to this Inbond Master
-        exbonds_child = db.query(ExbondChild).filter(ExbondChild.exbond_master_id == exbond_master_id).all()
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.id == exbond_master_id).all()
         
         if not exbonds_child:
             return {
@@ -78,6 +99,7 @@ def get_exbonds(
                     "exbond_child_id": exbond_detail_child.id,
                     "material_master_id": exbond_detail_child.material_master_id,
                     "material_name": material.name if material else None,
+                    "material_short_code": material.short_code if material else None,
                     "customer_master_id": exbond_detail_child.customer_master_id,
                     "customer_name": customer.name if customer else None,
                     "weight": exbond_detail_child.weight
@@ -124,6 +146,7 @@ def create_dispatch(data: CreateDispatchMaster, db:Session = Depends(get_db)):
         db.commit()
         db.refresh(dispatch_master)
 
+        exbond_child_id_list = []
         for dispatchchild in data.dispatchchild:
             dispatch_child = DispatchChild(
                 dispatch_master_id = dispatch_master.id,
@@ -133,6 +156,7 @@ def create_dispatch(data: CreateDispatchMaster, db:Session = Depends(get_db)):
                 truck_no = dispatchchild.truck_no
             )
             db.add(dispatch_child)
+            exbond_child_id_list.append(dispatchchild.exbond_child_id)
 
             exbond_child_update = db.query(ExbondChild).filter(ExbondChild.id == dispatchchild.exbond_child_id).first()
 
@@ -140,6 +164,7 @@ def create_dispatch(data: CreateDispatchMaster, db:Session = Depends(get_db)):
                 exbond_child_update.is_dispatched = True
                 db.add(exbond_child_update)
         db.commit()
+        get_weight_total_dispatch(exbond_child_id_list, db)
 
         return {
             "status": status.HTTP_201_CREATED,
@@ -181,6 +206,7 @@ def get_all_details(db:Session = Depends(get_db)):
                     "dispatch_weight": dispatch_child.dispatch_weight,
                     "truck_no": dispatch_child.truck_no,
                     "material": material.name,
+                    "material_short_code": material.short_code,
                     "exbond_weight": exbond_child.weight,
                     "customer": customer.name
                 }
@@ -214,6 +240,7 @@ def get_all_details(db:Session = Depends(get_db)):
 @router.put("/soft_delete_partial/{dispatch_child_id}")
 def soft_delete_partial_entry(dispatch_child_id: int, db:Session = Depends(get_db)):
     try:
+        exbond_child_id_list = [] 
         dispatch_child = db.query(DispatchChild).filter(DispatchChild.id == dispatch_child_id).first()
         dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_child.dispatch_master_id).first()
 
@@ -228,7 +255,8 @@ def soft_delete_partial_entry(dispatch_child_id: int, db:Session = Depends(get_d
                 "status": status.HTTP_204_NO_CONTENT,
                 "message": "Dispatch child already deleted"
             }
-        
+        exbond_child_id_list.append(dispatch_child.exbond_child_id)
+
         dispatch_weight = dispatch_child.dispatch_weight
         total_dispatch_weight = dispatch_master.total_dispatch_weight
 
@@ -240,6 +268,7 @@ def soft_delete_partial_entry(dispatch_child_id: int, db:Session = Depends(get_d
 
         dispatch_child.is_delete = 1
         db.commit()
+        get_weight_total_dispatch(exbond_child_id_list, db)
 
         return {
             "status": status.HTTP_200_OK,
@@ -275,12 +304,14 @@ def soft_delete_complete_entry(dispatch_master_id: int, db:Session = Depends(get
                 "status": status.HTTP_204_NO_CONTENT,
                 "message": "Dispatch master already deleted"
             }
-        
+        exbond_child_id_list = []
         for dispatch_child in dispatchs_child:
             dispatch_child.is_delete = 1
+            exbond_child_id_list.append(dispatch_child.exbond_child_id)
 
         dispatch_master.is_delete = 1
         db.commit()
+        get_weight_total_dispatch(exbond_child_id_list, db)
 
         return {
             "status": status.HTTP_200_OK,
@@ -297,3 +328,158 @@ def soft_delete_complete_entry(dispatch_master_id: int, db:Session = Depends(get
             "message": "Internal server error",
             "detail": e
         }
+
+
+# @router.put("/update_partial/{dispatch_child_id}")
+# def partial_update_entry(dispatch_child_id: int, data: UpdateDispatchChild, db:Session = Depends(get_db)):
+#     try:
+#         dispatch_child = db.query(DispatchChild).filter(DispatchChild.id == dispatch_child_id, DispatchChild.is_delete == 0).first()
+
+#         if not dispatch_child:
+#             raise HTTPException(
+#                 status_code = status.HTTP_404_NOT_FOUND,
+#                 detail = "Dispatch child entry not found or already deleted"
+#             )
+#         old_weight_dispatch_child = dispatch_child.dispatch_weight
+
+#         dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_child.dispatch_master_id, DispatchMaster.is_delete == 0).first()
+#         total_weight_dispatch_master = dispatch_master.total_dispatch_weight
+        
+#         if data.exbond_child_id is not None:
+#             dispatch_child.exbond_child_id = data.exbond_child_id
+#         if data.dispatch_date is not None:
+#             dispatch_child.dispatch_date = data.dispatch_date
+#         if data.dispatch_weight is not None:
+#             dispatch_child.dispatch_weight = data.dispatch_weight
+#             difference = old_weight_dispatch_child - data.dispatch_weight
+#             dispatch_master.total_dispatch_weight = total_weight_dispatch_master - difference
+
+#         if data.truck_no is not None:
+#             dispatch_child.truck_no = data.truck_no
+
+#         dispatchs_child = db.query(DispatchChild).filter(DispatchChild.exbond_child_id == dispatch_child.exbond_child_id, DispatchChild.is_delete == 0).all()
+#         new_total_weight = 0
+#         for child in dispatchs_child:
+#             new_total_weight += child.dispatch_weight
+        
+#         exbond_child = db.query(ExbondChild).filter(ExbondChild.id == dispatch_child.exbond_child_id, ExbondChild.is_delete == 0).first()
+#         exbond_weight = exbond_child.weight
+        
+#         if exbond_weight > new_total_weight:
+#             exbond_child.is_dispatched = 0
+        
+#         db.commit()
+#         db.refresh(dispatch_child)
+#         return {
+#             "status": status.HTTP_200_OK,
+#             "message": "Dispatch child entry updated successfully and totals recalculated"
+#         } 
+
+#     except HTTPException as e:
+#         raise e
+    
+#     except Exception as e:
+#         db.rollback()
+#         return {
+#             "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             "message": "Internal server error",
+#             "detail": str(e)
+#         }     
+    
+
+@router.put("/update_complete/{dispatch_master_id}")
+def update_dispatch_entry(dispatch_master_id: int, data: UpdateDispatchMaster, db: Session = Depends(get_db)):
+    try:
+        # 1️⃣ Fetch master record
+        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_master_id, DispatchMaster.is_delete == 0).first()
+
+        if not dispatch_master:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dispatch master record not found."
+            )
+
+        # 2️⃣ Update master fields (excluding children)
+        for key, value in data.dict(exclude_unset=True, exclude={"dispatchchild"}).items():
+            setattr(dispatch_master, key, value)
+
+        exbond_child_id_list = []
+        # 3️⃣ Update child entries if provided
+        if data.dispatchchild:
+            for dispatch_child_data in data.dispatchchild:
+                # Must include child id
+                if not dispatch_child_data.dispatch_child_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Each dispatch child record must include an 'id' for update."
+                    )
+
+                # Fetch the existing dispatch child
+                dispatch_child = db.query(DispatchChild).filter(DispatchChild.id == dispatch_child_data.dispatch_child_id, DispatchChild.dispatch_master_id == dispatch_master_id, DispatchChild.is_delete == 0).first()
+
+                if not dispatch_child:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Dispatch child with ID {dispatch_child_data.dispatch_child_id} not found."
+                    )
+                exbond_child_id_list.append(dispatch_child.exbond_child_id)
+
+                # ⚙️ Validation: Dispatch vs Exbond weight
+                if dispatch_child.exbond_child_id:
+                    # Get all dispatch entries linked to same exbond child
+                    all_dispatch_for_same_exbond = db.query(DispatchChild).filter(DispatchChild.exbond_child_id == dispatch_child.exbond_child_id, DispatchChild.is_delete == 0).all()
+
+                    # Calculate total dispatch weight including updated value
+                    total_dispatch_weight = 0
+                    for d in all_dispatch_for_same_exbond:
+                        if d.id == dispatch_child_data.dispatch_child_id and dispatch_child_data.dispatch_weight is not None:
+                            total_dispatch_weight += dispatch_child_data.dispatch_weight
+                        else:
+                            total_dispatch_weight += d.dispatch_weight or 0
+
+                    # Fetch corresponding exbond_child for weight comparison
+                    exbond_child = db.query(ExbondChild).filter(ExbondChild.id == dispatch_child.exbond_child_id, ExbondChild.is_delete == 0).first()
+
+                    if not exbond_child:
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Exbond child with ID {dispatch_child.exbond_child_id} not found."
+                        )
+
+                    # Compare total dispatch vs exbond weight
+                    if total_dispatch_weight > exbond_child.weight or 0:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=(
+                                f"Cannot update DispatchChild ID {dispatch_child_data.dispatch_child_id}: "
+                                f"Total Dispatch weight ({total_dispatch_weight}) for ExbondChild ID {dispatch_child.exbond_child_id} "
+                                f"exceeds Exbond weight ({exbond_child.weight})."
+                            )
+                        )
+                    
+                    # if total_dispatch_weight < exbond_child.weight:
+                    #     exbond_child.is_dispatched = 0
+
+                # 4️⃣ Apply updates if validation passes
+                for key, value in dispatch_child_data.dict(exclude_unset=True).items():
+                    setattr(dispatch_child, key, value)
+
+        # 5️⃣ Commit and refresh
+        db.commit()
+        db.refresh(dispatch_master)
+        get_weight_total_dispatch(exbond_child_id_list, db)
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Dispatch master entry updated successfully and totals recalculated"
+        }
+
+    except HTTPException as e:
+        raise e
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )

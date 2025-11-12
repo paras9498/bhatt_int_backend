@@ -81,7 +81,8 @@ def get_section_name(db:Session = Depends(get_db)):
         for material in materials:
             obj = {
                 "material_id": material.id,
-                "material_name": material.name
+                "material_name": material.name,
+                "material_short_code": material.short_code
             }
             material_list.append(obj)
         

@@ -1,5 +1,5 @@
 from app.database import Base
-from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean
+from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, func
 from datetime import datetime
 from decimal import Decimal
 
@@ -14,7 +14,7 @@ class ExbondMaster(Base):
     is_delete = Column(Boolean, default=False)
     #total_dispatch_weight = Column(Numeric(18,2), default=Decimal('0.00'))
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)
 
@@ -44,7 +44,7 @@ class ExbondChild(Base):
     #dispatch_weight = Column(Numeric(18,2), default=Decimal('0.00'))
     #truck_number = Column(String(50))
     created_at = Column(DateTime, default = datetime.utcnow)
-    updated_at = Column(DateTime, default = datetime.utcnow)
+    updated_at = Column(DateTime, default = datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)
 
@@ -59,6 +59,6 @@ class ExbondAdjustment(Base):
     type = Column(String(50))
     is_delete = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=func.now())
     created_by = Column(Integer, nullable=True)
     updated_by = Column(Integer, nullable=True)
