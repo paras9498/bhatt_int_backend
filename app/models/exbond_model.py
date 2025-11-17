@@ -38,6 +38,7 @@ class ExbondChild(Base):
     rate = Column(Numeric(18,2), default=Decimal('0.00'))
     weight = Column(Numeric(18,2), default=Decimal('0.00'))
     invoice_amount_inr = Column(Numeric(18,2), default=Decimal('0.00'))
+    is_duty_paid = Column(Boolean, default=False)
     is_dispatched = Column(Boolean, default=False)
     is_delete = Column(Boolean, default=False)
     #dispatch_date = Column(Date)

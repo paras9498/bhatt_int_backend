@@ -134,6 +134,14 @@ def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
 
         inbond_master_id_list = []
         for exbondchild in data.exbondchild:
+            inbond = db.query(InbondMaster).filter(InbondMaster.id == exbondchild.inbond_master_id, InbondMaster.is_delete == 0).first()
+            
+            if inbond.inbond_date > exbondchild.be_date:
+                raise HTTPException(
+                status_code = status.HTTP_400_BAD_REQUEST,
+                detail = "Invalid date entry. Exbond be date should be greater than inbond date"
+            )
+
             exbond_child = ExbondChild(
                 exbond_master_id = exbond_master.id,
                 inbond_master_id = exbondchild.inbond_master_id,
@@ -150,6 +158,7 @@ def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
                 rate = exbondchild.rate,
                 weight = exbondchild.weight,
                 invoice_amount_inr = exbondchild.invoice_amount_inr,
+                is_duty_paid = exbondchild.is_duty_paid
                 #dispatch_date = exbondchild.dispatch_date,
                 #dispatch_weight = exbondchild.dipspatch_weight,
                 #truck_number = exbondchild.truck_number
@@ -158,14 +167,17 @@ def create_exbond(data: CreateExbondMaster, db:Session = Depends(get_db)):
             inbond_master_id_list.append(exbond_child.inbond_master_id)
         db.commit()
 
-        result = get_total_weight_by_material(inbond_master_id_list,db)
-        print(result)
+        get_total_weight_by_material(inbond_master_id_list,db)
+        #print(result)
 
         return{
             "status": status.HTTP_201_CREATED,
             "message": "Exbond entry created successfully",
             "data":{}
         }
+    
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         db.rollback()
@@ -207,10 +219,15 @@ def get_all_details(
             exbonds_child = child_query.all()
             
             for exbond_child in exbonds_child:
-                section = db.query(SectionMaster).filter(SectionMaster.id == exbond_child.section_master_id, SectionMaster.is_delete == 0).first()
-                material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
-                inbond = db.query(InbondMaster).filter(InbondMaster.id == exbond_child.inbond_master_id, InbondChild.is_delete == 0).first()
-                customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_child.customer_master_id, CustomerMaster.is_delete == 0).first()
+                #section = db.query(SectionMaster).filter(SectionMaster.id == exbond_child.section_master_id, SectionMaster.is_delete == 0).first()
+                #material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
+                inbond = db.query(InbondMaster).filter(InbondMaster.id == exbond_child.inbond_master_id, InbondMaster.is_delete == 0).first()
+                #customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_child.customer_master_id, CustomerMaster.is_delete == 0).first()
+
+                section = db.query(SectionMaster).filter(SectionMaster.id == exbond_child.section_master_id).first()
+                material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id).first()
+                customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_child.customer_master_id).first()
+
 
                 if bi_number and (not inbond or inbond.bi_number != bi_number):
                     continue
@@ -277,7 +294,8 @@ def get_material_inbond_bedate_by_id(
 
         list = []
         for inbond_child in inbonds_child:
-            material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
+            #material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
+            material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id).first()
             obj = {
                 "inbond_master_id": inbond_master.id,
                 "inbond_child_id": inbond_child.id,

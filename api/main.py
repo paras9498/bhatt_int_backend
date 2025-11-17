@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from app.routers import auth, inbond, material, section, exbond, duty_space, customer, dispatch
+from app.routers import auth, inbond, material, section, exbond, duty_space, customer, dispatch, reports
 from app.database import engine, Base,SessionLocal
 from app.models.auth_model import User
 from sqlalchemy.exc import IntegrityError
@@ -20,7 +20,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://192.168.2.12:8000", "http://192.168.2.2:3000", "http://localhost:3000", "https://bhattinternational.vercel.app"],
+    allow_origins=["http://192.168.2.9:8000", "http://192.168.2.5:3000", "http://localhost:3000", "https://bhattinternational.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,6 +34,7 @@ app.include_router(exbond.router)
 app.include_router(duty_space.router)
 app.include_router(customer.router)
 app.include_router(dispatch.router)
+app.include_router(reports.router)
 
 # ---------- Create static admin user on startup ----------
 def create_admin_user():

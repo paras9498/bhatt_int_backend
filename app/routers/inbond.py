@@ -9,6 +9,8 @@ from ..models.inbond_model import InbondMaster, InbondChild
 from ..models.material_model import MaterialMaster
 from ..models.exbond_model import ExbondChild
 from ..routers.exbond import get_total_weight_by_material
+from sqlalchemy import or_
+import re
 
 router = APIRouter(prefix = "/api/inbond", tags = ["Inbond"])
 
@@ -30,6 +32,12 @@ Create entry in the "inbond_master" and "inbond_child" table
 @router.post("/create")
 def create_inbond(data: CreateInbond, db:Session=Depends(get_db)):
     try:
+        if data.be_date > data.inbond_date:
+            raise HTTPException(
+                status_code = status.HTTP_400_BAD_REQUEST,
+                detail = "Invalid date entry. Inbond date should be greater than be date"
+            )
+        
         inbond_master = InbondMaster(
             bi_number = data.bi_number,
             be_number = data.be_number,
@@ -63,6 +71,9 @@ def create_inbond(data: CreateInbond, db:Session=Depends(get_db)):
             "message": "Inbond entry created successfully",
             "data":{}
         }
+    
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         db.rollback()
@@ -79,24 +90,40 @@ To get all the details from the "inbond_master" and "inbond_child"
 @router.get("/get_all")
 def get_all_details(
     db:Session = Depends(get_db),
-    bi_number: Optional[str] = Query(None, description="Filter by BI number (partial match allowed)"),
-    start_date: Optional[date] = Query(None, description="Filter start date"),
-    end_date: Optional[date] = Query(None, description="Filter end date")
+    number: Optional[str] = Query(None, description="Filter by BI number (partial match allowed)"),
+    inbond_start_date: Optional[date] = Query(None, description="Filter start date"),
+    inbond_end_date: Optional[date] = Query(None, description="Filter end date")
 ):
     try:
         # 🧩 Base query
         query = db.query(InbondMaster).filter(InbondMaster.is_delete == 0)
 
         # ✅ Apply filters dynamically
-        if bi_number:
-            query = query.filter(InbondMaster.bi_number == bi_number)
+        if number:
+            num = number.strip().upper()
 
-        if start_date and end_date:
-            query = query.filter(InbondMaster.inbond_date.between(start_date, end_date))
-        elif start_date:
-            query = query.filter(InbondMaster.inbond_date >= start_date)
-        elif end_date:
-            query = query.filter(InbondMaster.inbond_date <= end_date)
+            if num.startswith("BI"):
+                query = query.filter(InbondMaster.bi_number == num)
+
+            elif num.startswith("BE"):
+                stripped_number = re.sub(r"\D", "", num)
+                query = query.filter(InbondMaster.be_number == stripped_number)
+
+            else:
+                # Search in both BI and BE (partial allowed)
+                query = query.filter(
+                    or_(
+                        InbondMaster.bi_number.like(f"%{num}%"),
+                        InbondMaster.be_number.like(f"%{num}%")
+                    )
+                )
+
+        if inbond_start_date and inbond_end_date:
+            query = query.filter(InbondMaster.inbond_date.between(inbond_start_date, inbond_end_date))
+        elif inbond_start_date:
+            query = query.filter(InbondMaster.inbond_date >= inbond_start_date)
+        elif inbond_end_date:
+            query = query.filter(InbondMaster.inbond_date <= inbond_end_date)
             
         inbonds_master = query.order_by(InbondMaster.created_at.desc()).all()
 
@@ -107,7 +134,7 @@ def get_all_details(
             child_list = []
             inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == master_id, InbondChild.is_delete == 0).all()
             for inbond_child in inbonds_child:
-                #material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
+                material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
                 material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id).first()
                 child_obj = {
                     "id": inbond_child.id,
@@ -397,7 +424,98 @@ def soft_delete_complete_entry(inbond_master_id: int, db:Session = Depends(get_d
 #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #             detail=f"Internal server error: {str(e)}"
 #         )
-    
+
+
+@router.get("/get_edit_details")
+def get_details_for_edit(
+    db: Session = Depends(get_db),
+    inbond_master_id: int = Query(..., description="Filter by inbond master id"),
+    inbond_child_id: Optional[int] = Query(None, description="Filter by inbond child id")
+):
+    try:
+        # 1️⃣ Get parent/master record
+        master_data = db.query(InbondMaster).filter(InbondMaster.id == inbond_master_id, InbondMaster.is_delete == 0).first()
+
+        if not master_data:
+            raise HTTPException(status_code=404, detail="Inbond master not found")
+
+        master_data_dict = {
+            "id": master_data.id,
+            "bi_number": master_data.bi_number,
+            "be_number": master_data.be_number,
+            "inbond_date": master_data.inbond_date,
+            "total_duty_inbond_amount_inr": master_data.total_duty_inbond_amount_inr,
+            "total_weight": master_data.total_weight,
+            "total_assessment_amount_inr": master_data.total_assessment_amount_inr,
+            "total_material_amount_usd": master_data.total_material_amount_usd  
+        }
+
+        # 2️⃣ If child ID is provided — get that specific child
+        if inbond_child_id:
+            child_data = db.query(InbondChild).filter(InbondChild.id == inbond_child_id,InbondChild.inbond_master_id == inbond_master_id,InbondChild.is_delete == 0).first()
+
+            if not child_data:
+                raise HTTPException(status_code=404, detail="Inbond child not found")
+
+            material = db.query(MaterialMaster).filter(MaterialMaster.id == child_data.material_master_id, MaterialMaster.is_delete == 0).first()
+            
+            child_data_dict = {
+                "id": child_data.id,
+                "material_master_id": child_data.material_master_id,
+                "material_name": material.name,
+                "material_short_code": material.short_code,
+                "duty_inbond_amount_inr": child_data.duty_inbond_amount_inr,
+                "weight": child_data.weight,
+                "invoice_amount_usd": child_data.invoice_amount_usd,
+                "assessment_amount_inr": child_data.assessment_amount_inr,
+                "dollar_inr": child_data.dollar_inr,
+                "price": child_data.price,
+                "material_amount_usd": child_data.material_amount_usd,
+            }
+            
+            return {
+                "status": status.HTTP_200_OK,
+                "message": "Master and child data found",
+                "data": {
+                    "master_data": master_data_dict,
+                    "child_data": child_data_dict
+                }
+            }
+
+        # 3️⃣ Else, get all children under this master
+        child_data_list = []
+        children_data = db.query(InbondChild).filter(InbondChild.inbond_master_id == inbond_master_id, InbondChild.is_delete == 0).all()
+        for c in children_data:
+            material_data = db.query(MaterialMaster).filter(MaterialMaster.id == c.material_master_id, MaterialMaster.is_delete == 0).first()
+            
+            child_data_list_dict = {
+                "id": c.id,
+                "material_master_id": c.material_master_id,
+                "material_name": material_data.name,
+                "material_short_code": material_data.short_code,
+                "duty_inbond_amount_inr": c.duty_inbond_amount_inr,
+                "weight": c.weight,
+                "invoice_amount_usd": c.invoice_amount_usd,
+                "assessment_amount_inr": c.assessment_amount_inr,
+                "dollar_inr": c.dollar_inr,
+                "price": c.price,
+                "material_amount_usd": c.material_amount_usd,
+            }
+            child_data_list.append(child_data_list_dict)
+
+        return {
+            "status": status.HTTP_200_OK,
+            "message": "Master and child data found",
+            "data": {
+                "master_data": master_data_dict,
+                "child_data": child_data_list
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @router.put("/update_complete/{inbond_master_id}")
 def update_inbond_entry(inbond_master_id: int, data: UpdateInbond, db: Session = Depends(get_db)):

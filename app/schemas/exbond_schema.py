@@ -18,6 +18,7 @@ class CreateExbondChild(BaseModel):
     rate: Decimal
     weight: Decimal
     invoice_amount_inr: Decimal
+    is_duty_paid: bool
     #dispatch_date: date
     #dipspatch_weight: float
     #truck_number: str
@@ -44,6 +45,7 @@ class UpdateExbondChild(BaseModel):
     rate: Optional[Decimal] = None
     weight: Optional[Decimal] = None
     invoice_amount_inr: Optional[Decimal] = None
+    is_duty_paid: Optional[bool] = None
 
 class UpdateExbondMaster(BaseModel):
     total_duty_exbond_amount_inr: Optional[Decimal] = None

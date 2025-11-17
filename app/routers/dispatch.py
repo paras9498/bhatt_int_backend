@@ -36,7 +36,7 @@ Get the list of be numbers from the 'exbond_child' table
 @router.get("/benumber")
 def get_all_be_number(db:Session = Depends(get_db)):
     try:
-        exbonds_child = db.query(ExbondChild).filter(ExbondChild.is_dispatched == 0).all()
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.is_dispatched == 0, ExbondChild.is_delete == 0).all()
 
         be_number_list = []
         for exbond_child in exbonds_child:
@@ -63,12 +63,12 @@ def get_all_be_number(db:Session = Depends(get_db)):
 
 @router.get("/get_exbond")
 def get_exbonds(
-    exbond_master_id: int = Query(..., description="Exbond Master ID"),
+    exbond_child_id: int = Query(..., description="Exbond Master ID"),
     db: Session = Depends(get_db)
 ):
     try:
         # Get all ExbondChild linked to this Inbond Master
-        exbonds_child = db.query(ExbondChild).filter(ExbondChild.id == exbond_master_id).all()
+        exbonds_child = db.query(ExbondChild).filter(ExbondChild.id == exbond_child_id, ExbondChild.is_delete == 0).all()
         
         if not exbonds_child:
             return {
@@ -83,17 +83,25 @@ def get_exbonds(
 
         # loop through each exbond_master_id
         for exbond_master_id in exbond_master_ids:
-            exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_master_id).first()
+            exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_master_id, ExbondMaster.is_delete == 0).first()
             if not exbond_master:
                 continue
 
             # Get all child entries for this exbond_master
-            exbonds_details_child = db.query(ExbondChild).filter(ExbondChild.exbond_master_id == exbond_master.id, ExbondChild.is_dispatched == 0).all()
+            exbonds_details_child = db.query(ExbondChild).filter(ExbondChild.exbond_master_id == exbond_master.id, ExbondChild.is_dispatched == 0, ExbondChild.is_delete == 0).all()
 
             exbond_child_list = []
             for exbond_detail_child in exbonds_details_child:
+                #customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_detail_child.customer_master_id, CustomerMaster.is_delete == 0).first()
+                #material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_detail_child.material_master_id, MaterialMaster.is_delete == 0).first()
+
                 customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_detail_child.customer_master_id).first()
                 material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_detail_child.material_master_id).first()
+
+                dispatchs_child = db.query(DispatchChild).filter(DispatchChild.exbond_child_id == exbond_detail_child.id, DispatchChild.is_delete == 0).all()
+                dispatch_weight_total = 0
+                for dispatch_child in dispatchs_child:
+                    dispatch_weight_total += dispatch_child.dispatch_weight
 
                 exbond_child_detail_obj = {
                     "exbond_child_id": exbond_detail_child.id,
@@ -102,7 +110,8 @@ def get_exbonds(
                     "material_short_code": material.short_code if material else None,
                     "customer_master_id": exbond_detail_child.customer_master_id,
                     "customer_name": customer.name if customer else None,
-                    "weight": exbond_detail_child.weight
+                    "weight": exbond_detail_child.weight,
+                    "dispatch_weight": dispatch_weight_total
                 }
                 exbond_child_list.append(exbond_child_detail_obj)
 
@@ -158,11 +167,11 @@ def create_dispatch(data: CreateDispatchMaster, db:Session = Depends(get_db)):
             db.add(dispatch_child)
             exbond_child_id_list.append(dispatchchild.exbond_child_id)
 
-            exbond_child_update = db.query(ExbondChild).filter(ExbondChild.id == dispatchchild.exbond_child_id).first()
+            exbond_child_update = db.query(ExbondChild).filter(ExbondChild.id == dispatchchild.exbond_child_id, ExbondChild.is_delete == 0).first()
 
-            if exbond_child_update:
-                exbond_child_update.is_dispatched = True
-                db.add(exbond_child_update)
+            # if exbond_child_update:
+            #     exbond_child_update.is_dispatched = True
+            #     db.add(exbond_child_update)
         db.commit()
         get_weight_total_dispatch(exbond_child_id_list, db)
 
@@ -193,8 +202,11 @@ def get_all_details(db:Session = Depends(get_db)):
             dispatchs_child = db.query(DispatchChild).filter(DispatchChild.dispatch_master_id == dispatch_master.id, DispatchChild.is_delete == 0).all()
             
             for dispatch_child in dispatchs_child:
-                exbond_child = db.query(ExbondChild).filter(ExbondChild.id == dispatch_child.exbond_child_id).first()
-                exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_child.exbond_master_id).first()
+                exbond_child = db.query(ExbondChild).filter(ExbondChild.id == dispatch_child.exbond_child_id, ExbondChild.is_delete == 0).first()
+                exbond_master = db.query(ExbondMaster).filter(ExbondMaster.id == exbond_child.exbond_master_id, ExbondMaster.is_delete == 0).first()
+                #material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
+                #customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_child.customer_master_id, CustomerMaster.is_delete == 0).first()
+
                 material = db.query(MaterialMaster).filter(MaterialMaster.id == exbond_child.material_master_id).first()
                 customer = db.query(CustomerMaster).filter(CustomerMaster.id == exbond_child.customer_master_id).first()
                 child_obj = {
@@ -241,8 +253,8 @@ def get_all_details(db:Session = Depends(get_db)):
 def soft_delete_partial_entry(dispatch_child_id: int, db:Session = Depends(get_db)):
     try:
         exbond_child_id_list = [] 
-        dispatch_child = db.query(DispatchChild).filter(DispatchChild.id == dispatch_child_id).first()
-        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_child.dispatch_master_id).first()
+        dispatch_child = db.query(DispatchChild).filter(DispatchChild.id == dispatch_child_id, DispatchChild.is_delete == 0).first()
+        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_child.dispatch_master_id, DispatchMaster.is_delete == 0).first()
 
         if not dispatch_child:
             raise HTTPException(
@@ -290,8 +302,8 @@ def soft_delete_partial_entry(dispatch_child_id: int, db:Session = Depends(get_d
 @router.put("/soft_delete_complete/{dispatch_master_id}")
 def soft_delete_complete_entry(dispatch_master_id: int, db:Session = Depends(get_db)):
     try:
-        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_master_id).first()
-        dispatchs_child = db.query(DispatchChild).filter(DispatchChild.dispatch_master_id == dispatch_master.id).all()
+        dispatch_master = db.query(DispatchMaster).filter(DispatchMaster.id == dispatch_master_id, DispatchMaster.is_delete == 0).first()
+        dispatchs_child = db.query(DispatchChild).filter(DispatchChild.dispatch_master_id == dispatch_master.id, DispatchChild.is_delete == 0).all()
 
         if not dispatch_master:
             raise HTTPException(

@@ -11,7 +11,7 @@ router = APIRouter(prefix = "/api/duty_space", tags = ["DutySpace"])
 @router.get("/get_duty_total")
 def get_duty_total(db:Session = Depends(get_db)):
     try:
-        inbonds_master = db.query(InbondMaster).all()
+        inbonds_master = db.query(InbondMaster).filter(InbondMaster.is_delete == 0).all()
 
         duty_list = []
         for inbond_master in inbonds_master:
@@ -21,7 +21,7 @@ def get_duty_total(db:Session = Depends(get_db)):
                 "total_duty_inbond": inbond_master.total_duty_inbond_amount_inr
             }
 
-            exbonds_child = db.query(ExbondChild).filter(ExbondChild.inbond_master_id == inbond_master.id).all()
+            exbonds_child = db.query(ExbondChild).filter(ExbondChild.inbond_master_id == inbond_master.id, ExbondChild.is_delete == 0).all()
             total_duty_exbond = 0
             for exbond_child in exbonds_child:
                 total_duty_exbond += exbond_child.duty_exbond_amount_inr

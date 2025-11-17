@@ -85,7 +85,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             # Access expired → check refresh token
             refresh_payload = decode_token(existing_token.refresh_token)
             if refresh_payload:
-                new_access_token = create_access_token(data={"sub": user.email, "user_type": user.user_type})
+                new_access_token = create_access_token(data={"id": user.id, "sub": user.email, "user_type": user.user_type})
                 existing_token.access_token = new_access_token
                 db.commit()
                 return {
@@ -101,8 +101,8 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
                 }
 
             # Both expired → issue new pair
-            new_access_token = create_access_token(data={"sub": user.email, "user_type": user.user_type})
-            new_refresh_token = create_refresh_token(data={"sub": user.email,"user_type": user.user_type})
+            new_access_token = create_access_token(data={"id": user.id, "sub": user.email, "user_type": user.user_type})
+            new_refresh_token = create_refresh_token(data={"id": user.id, "sub": user.email,"user_type": user.user_type})
             existing_token.access_token = new_access_token
             existing_token.refresh_token = new_refresh_token
             db.commit()
@@ -120,8 +120,8 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
         else:
             # No token record → create new
-            access_token = create_access_token(data={"sub": user.email, "user_type": user.user_type})
-            refresh_token = create_refresh_token(data={"sub": user.email, "user_type": user.user_type})
+            access_token = create_access_token(data={"id": user.id, "sub": user.email, "user_type": user.user_type})
+            refresh_token = create_refresh_token(data={"id": user.id, "sub": user.email, "user_type": user.user_type})
             new_tokens = Tokens(u_id=user.id, access_token=access_token, refresh_token=refresh_token)
             db.add(new_tokens)
             db.commit()
