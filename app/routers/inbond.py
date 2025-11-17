@@ -107,8 +107,7 @@ def get_all_details(
             child_list = []
             inbonds_child = db.query(InbondChild).filter(InbondChild.inbond_master_id == master_id, InbondChild.is_delete == 0).all()
             for inbond_child in inbonds_child:
-                #material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
-                material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id).first()
+                material = db.query(MaterialMaster).filter(MaterialMaster.id == inbond_child.material_master_id, MaterialMaster.is_delete == 0).first()
                 child_obj = {
                     "id": inbond_child.id,
                     "material_master_id": inbond_child.material_master_id,
