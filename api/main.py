@@ -40,8 +40,8 @@ app.include_router(reports.router)
 def create_admin_user():
     db = SessionLocal()
     try:
-        admin_email = "admin1@gmail.com"
-        password="admin123"
+        admin_email = "admin@gmail.com"
+        password="admin"
         hashed_password = CryptContext(schemes=["bcrypt"], deprecated="auto").hash(password)
         existing_admin = db.query(User).filter(User.email == admin_email).first()
         if not existing_admin:

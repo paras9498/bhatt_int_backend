@@ -457,7 +457,8 @@ def get_details_for_edit(
             if not child_data:
                 raise HTTPException(status_code=404, detail="Inbond child not found")
 
-            material = db.query(MaterialMaster).filter(MaterialMaster.id == child_data.material_master_id, MaterialMaster.is_delete == 0).first()
+            #material = db.query(MaterialMaster).filter(MaterialMaster.id == child_data.material_master_id, MaterialMaster.is_delete == 0).first()
+            material = db.query(MaterialMaster).filter(MaterialMaster.id == child_data.material_master_id).first()
             
             child_data_dict = {
                 "id": child_data.id,
@@ -486,7 +487,8 @@ def get_details_for_edit(
         child_data_list = []
         children_data = db.query(InbondChild).filter(InbondChild.inbond_master_id == inbond_master_id, InbondChild.is_delete == 0).all()
         for c in children_data:
-            material_data = db.query(MaterialMaster).filter(MaterialMaster.id == c.material_master_id, MaterialMaster.is_delete == 0).first()
+            #material_data = db.query(MaterialMaster).filter(MaterialMaster.id == c.material_master_id, MaterialMaster.is_delete == 0).first()
+            material_data = db.query(MaterialMaster).filter(MaterialMaster.id == c.material_master_id).first()
             
             child_data_list_dict = {
                 "id": c.id,
